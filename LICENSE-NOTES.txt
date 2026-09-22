@@ -1,0 +1,2 @@
+File bro code application code is provided for personal use.
+The included app-logo.png is carried forward from the File bro code V10 project supplied by the user.
