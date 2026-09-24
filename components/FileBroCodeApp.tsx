@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import FileViewer from '@/components/FileViewer'
 import SiteFooter from '@/components/SiteFooter'
+import FileOrbit from '@/components/FileOrbit'
+import FileTypeIcon from '@/components/FileTypeIcon'
 import { EXTENSION_LIST, FileCategory, FileMeta, formatBytes, getExtension, getFileMeta, isSupportedFile } from '@/lib/file-types'
 
 type LibraryItem = {
@@ -21,7 +23,16 @@ type PersistedItem = Omit<LibraryItem, 'file' | 'meta'> & {
   label: string
 }
 
+function WindowsIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 5.2 10.2 4.1v7H3V5.2Zm8.3-1.3L21 2.5v8.6h-9.7V3.9ZM3 12.9h7.2v7L3 18.8v-5.9Zm8.3 0H21v8.6l-9.7-1.4v-7.2Z" fill="currentColor" />
+    </svg>
+  )
+}
+
 const STORAGE_KEY = 'filebrocode.next.library.v10'
+const DESKTOP_DOWNLOAD_URL = process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL || '/downloads/FileBro-Setup-1.0.0-x64.exe'
 const FILTERS: Array<{ key: 'all' | FileCategory; label: string }> = [
   { key: 'all', label: 'All' },
   { key: 'pdf', label: 'PDF' },
@@ -65,7 +76,11 @@ export default function FileBroCodeApp() {
   }, [])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme
+    const root = document.documentElement
+    root.classList.add('theme-switching')
+    root.dataset.theme = theme
+    const timer = window.setTimeout(() => root.classList.remove('theme-switching'), 340)
+    return () => window.clearTimeout(timer)
   }, [theme])
 
   useEffect(() => {
@@ -73,6 +88,25 @@ export default function FileBroCodeApp() {
     // instead of relying on a TypeScript JSX declaration.
     folderInput.current?.setAttribute('webkitdirectory', '')
   }, [])
+
+  useEffect(() => {
+    const cards = Array.from(document.querySelectorAll<HTMLElement>('.file-card[data-scroll-reveal]'))
+    if (!cards.length) return
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduceMotion) {
+      cards.forEach((card) => card.classList.add('is-visible'))
+      return
+    }
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return
+        entry.target.classList.add('is-visible')
+        observer.unobserve(entry.target)
+      })
+    }, { threshold: 0.08, rootMargin: '0px 0px -6% 0px' })
+    cards.forEach((card) => observer.observe(card))
+    return () => observer.disconnect()
+  }, [items, query, filter, sort])
 
   useEffect(() => {
     try {
@@ -154,7 +188,7 @@ export default function FileBroCodeApp() {
     }
 
     if (added || restored) {
-      const parts = []
+      const parts: string[] = []
       if (added) parts.push(`${added} added`)
       if (restored) parts.push(`${restored} restored`)
       if (skipped) parts.push(`${skipped} unsupported skipped`)
@@ -185,9 +219,9 @@ export default function FileBroCodeApp() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#home" aria-label="File bro code home">
+        <a className="brand" href="#home" aria-label="File bro home">
           <img className="brand-logo" src="/app-logo.png" alt="" />
-          <span className="brand-name">File bro code</span>
+          <span className="brand-name"><span>File</span><b>bro</b></span>
         </a>
 
         <nav className="topnav" aria-label="Primary">
@@ -211,15 +245,25 @@ export default function FileBroCodeApp() {
 
       <main id="home">
         <section className="hero">
-          <div className="hero-content">
-            <div className="hero-badge transition-transform duration-200 hover:scale-105">A simple local document viewer</div>
-            <h1>Your files, in one<br />quiet place.</h1>
-            <p>Open and read PDF, Word, Excel, PowerPoint, text, images and media directly on your device. No account, no upload, no noise.</p>
-            <div className="hero-actions" id="create">
+          <div className="hero-layout">
+            <div className="hero-content">
+              <div className="hero-badge transition-transform duration-200 hover:scale-105">A simple local document viewer</div>
+              <h1>Your files, in one<br />quiet place.</h1>
+              <p>Open and read PDF, Word, Excel, PowerPoint, text, images and media directly on your device. No account, no upload, no noise.</p>
+              <div className="hero-actions" id="create">
               <button type="button" className="btn btn-primary" onClick={openFiles}>Get Started <span aria-hidden="true">→</span></button>
               <button type="button" className="btn btn-secondary" onClick={openFolder}>Open folder</button>
-              <input ref={fileInput} type="file" hidden multiple accept={EXTENSION_LIST.map((ext) => `.${ext}`).join(',')} onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = '' }} />
-              <input ref={folderInput} type="file" hidden multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = '' }} />
+              <a className="btn btn-desktop-download" href={DESKTOP_DOWNLOAD_URL} download>
+                <WindowsIcon className="download-platform-icon" />
+                <span>Download for Windows</span>
+                <span className="download-arrow" aria-hidden="true">↓</span>
+              </a>
+                <input ref={fileInput} type="file" hidden multiple accept={EXTENSION_LIST.map((ext) => `.${ext}`).join(',')} onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = '' }} />
+                <input ref={folderInput} type="file" hidden multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = '' }} />
+              </div>
+            </div>
+            <div className="hero-orbit-wrap">
+              <FileOrbit />
             </div>
           </div>
         </section>
@@ -274,9 +318,11 @@ export default function FileBroCodeApp() {
             {visibleItems.map((item) => {
               const unavailable = !item.file
               return (
-                <article key={item.id} className={`file-card ${unavailable ? 'opacity-70' : ''}`} tabIndex={0} role="button" onClick={() => item.file ? setViewerFile(item.file) : showToast('Re-select this file after a reload to open it.', true)} onKeyDown={(event) => { if ((event.key === 'Enter' || event.key === ' ') && item.file) setViewerFile(item.file) }}>
+                <article key={item.id} className={`file-card ${unavailable ? 'opacity-70' : ''}`} data-scroll-reveal tabIndex={0} role="button" onClick={() => item.file ? setViewerFile(item.file) : showToast('Re-select this file after a reload to open it.', true)} onKeyDown={(event) => { if ((event.key === 'Enter' || event.key === ' ') && item.file) setViewerFile(item.file) }}>
                   <div className="file-top">
-                    <div className="file-type">{item.meta.label}</div>
+                    <div className="file-type-mark" title={`${item.meta.label} file`}>
+                      <FileTypeIcon extension={getExtension(item.name)} size={30} />
+                    </div>
                     <div className="file-card-actions">
                       <button type="button" className="file-open" disabled={unavailable} onClick={(event) => { event.stopPropagation(); if (item.file) setViewerFile(item.file) }} title={unavailable ? 'Re-add file after reload' : 'Open file'}>{unavailable ? '↻' : '↗'}</button>
                       <button type="button" className="file-remove flex items-center justify-center transition-transform duration-200 hover:scale-110" onClick={(event) => { event.stopPropagation(); removeItem(item.id) }} aria-label={`Remove ${item.name}`}>×</button>

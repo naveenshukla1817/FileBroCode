@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getExtension, getFileMeta, formatBytes } from '@/lib/file-types'
 import { parseDocx, parsePptx, parseXlsx } from '@/lib/office'
+import FileTypeIcon from '@/components/FileTypeIcon'
 
 type FileViewerProps = {
   file: File | null
@@ -46,6 +47,7 @@ export default function FileViewer({ file, open, onClose }: FileViewerProps) {
   const [officeHtml, setOfficeHtml] = useState<string | null>(null)
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
   const [fullScreen, setFullScreen] = useState(false)
+  const [captureMessage, setCaptureMessage] = useState<string | null>(null)
   const viewerRef = useRef<HTMLDivElement>(null)
 
   const extension = useMemo(() => (file ? getExtension(file.name) : ''), [file])
@@ -148,6 +150,61 @@ export default function FileViewer({ file, open, onClose }: FileViewerProps) {
     }
   }, [open])
 
+  const takeQuickScreenshot = async () => {
+    if (!file) return
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      setCaptureMessage('Quick screenshot is not supported in this browser.')
+      return
+    }
+
+    let stream: MediaStream | null = null
+    try {
+      setCaptureMessage('Choose this tab in the capture picker…')
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: 'browser', preferCurrentTab: true },
+        audio: false,
+      } as any)
+
+      const video = document.createElement('video')
+      video.muted = true
+      video.playsInline = true
+      video.srcObject = stream
+      await video.play()
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+      const width = video.videoWidth || window.innerWidth
+      const height = video.videoHeight || window.innerHeight
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('Could not create screenshot canvas.')
+      context.drawImage(video, 0, 0, width, height)
+
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+      if (!blob) throw new Error('Could not create screenshot image.')
+
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      const baseName = file.name.replace(/\.[^/.]+$/, '') || 'filebro-screenshot'
+      anchor.href = url
+      anchor.download = `${baseName}-screenshot.png`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 0)
+      setCaptureMessage('Screenshot saved')
+    } catch (cause) {
+      const message = cause instanceof DOMException && cause.name === 'NotAllowedError'
+        ? 'Screenshot cancelled'
+        : cause instanceof Error ? cause.message : 'Screenshot failed'
+      setCaptureMessage(message)
+    } finally {
+      stream?.getTracks().forEach((track) => track.stop())
+      window.setTimeout(() => setCaptureMessage(null), 2400)
+    }
+  }
+
   if (!open || !file) return null
 
   const handleClose = async () => {
@@ -236,7 +293,9 @@ export default function FileViewer({ file, open, onClose }: FileViewerProps) {
     >
       <div className="viewer-topbar">
         <button type="button" className="viewer-back" onClick={() => void handleClose()} aria-label="Back to files" title="Back to files"><span aria-hidden="true" /></button>
-        <img className="viewer-logo" src="/app-logo.png" alt="" aria-hidden="true" />
+        <div className="viewer-file-icon">
+          <FileTypeIcon extension={extension} size={34} />
+        </div>
         <div className="viewer-title-wrap">
           <div className="viewer-title">{title}</div>
           <div className="viewer-meta">{metaText}</div>
@@ -251,11 +310,17 @@ export default function FileViewer({ file, open, onClose }: FileViewerProps) {
               </button>
             </>
           )}
+          {kind === 'pdf' && (
+            <button type="button" className="top-icon viewer-screenshot" onClick={() => void takeQuickScreenshot()} aria-label="Quick screenshot" title="Quick screenshot">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 6.5 10 4h4l1.5 2.5H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3.5Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><circle cx="12" cy="12.5" r="3.1" fill="none" stroke="currentColor" strokeWidth="1.7"/></svg>
+            </button>
+          )}
           <button type="button" className="top-icon" onClick={toggleFullscreen} aria-label={fullScreen ? 'Exit fullscreen' : 'Enter fullscreen'} title={fullScreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
             {fullScreen ? '⛶' : '⛶'}
           </button>
         </div>
       </div>
+      {captureMessage && <div className="viewer-capture-message" role="status">{captureMessage}</div>}
       <div className="viewer-body">
         {loading ? (
           <div className="viewer-loading"><div className="spinner" /><div>Opening document…</div></div>

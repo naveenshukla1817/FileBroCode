@@ -1,108 +1,86 @@
-# FileBroCode
+FileBroCode v12 — UI refinements
 
-A simple, client-first file viewer for opening and reading documents and media directly in your browser.
+# File bro code — Next.js
 
-**Open a file → view it instantly → keep it private.**
+A personal, client-first file viewer rebuilt from the File bro code V10 visual system.
 
-## Overview
+## Setup
 
-FileBroCode is a local-first file viewer built with Next.js and React.
+Fresh project commands:
 
-Files are selected directly from your device and processed in the browser. The app does not require an account, database, file-upload service, or server-side document conversion for its core viewing experience.
+```bash
+npx create-next-app@latest file-bro-code --typescript --eslint --app
+cd file-bro-code
+npm install jszip
+npm install -D tailwindcss@3.4.17 postcss autoprefixer
+npx tailwindcss init -p
+npm run dev
+```
 
-## Features
+When using this supplied project ZIP, just run:
 
-- Open supported files directly from the file picker
-- Selected files open immediately in the viewer
-- Drag and drop support
-- Recent/local file list
-- Search, filter, and sort files
-- Dark and Light modes
-- Reading Mode for documents
-- File metadata display
-- Fullscreen document viewing
-- Responsive desktop and mobile UI
-- Clean, minimal FileBroCode interface
-- No ads
-- No login or signup
-- No cloud file storage
+```bash
+npm install
+npm run dev
+```
 
-## Supported File Formats
+Or use this repository directly:
 
-### Documents
+```bash
+npm install
+npm run dev
+```
 
-- PDF
-- DOCX
-- XLSX
-- PPTX
-- TXT
-- CSV
-- JSON
-- XML
-- Markdown
-- LOG
+Open http://localhost:3000.
 
-### Images
+## Tech stack
 
-- SVG
-- JPG
-- JPEG
-- PNG
-- WEBP
-- GIF
+- Next.js 16.3.3 + React 19.2
+- TypeScript
+- Tailwind CSS 3.4.17 with `tailwind.config.js`
+- JSZip for lightweight client-side DOCX/XLSX/PPTX package parsing
+- No database
+- No login
+- No ad SDK
+- No server-side document conversion
 
-### Audio
+Next.js 16.3.3 was the current Active LTS patch referenced by the official Next.js release notes in September 2026. Tailwind CSS currently documents v4 as the recommended installation path; this project deliberately keeps Tailwind 3.4 so the requested explicit `tailwind.config.js` remains available while preserving the V10 token system.
 
-- MP3
-- WAV
-- FLAC
+## File support
 
-### Video
+### Opens locally in the browser
 
-- MP4
-- WebM
-- MOV
+- PDF: native `<iframe>` using a local object URL
+- DOCX: lightweight OOXML text/table parsing
+- XLSX: lightweight workbook/sheet parsing with sparse-cell column alignment
+- PPTX: lightweight text extraction using the real `presentation.xml` slide order
+- TXT/CSV/JSON/XML/MD/LOG: sliced first 8 MiB view
+- MP3, WAV, FLAC: HTML5 `<audio>`
+- MP4, WebM, MOV: HTML5 `<video>` (actual codec support remains browser-dependent)
+- SVG, JPG, JPEG, PNG: `<img>`
 
-Browser codec support may vary for some audio and video files.
+### Legacy Office formats
 
-## Legacy Office Formats
+`.doc`, `.xls`, and `.ppt` are not safely renderable from a local browser `File` object using Google Docs Viewer because Google needs a publicly reachable URL. The app detects these formats and shows a clear explanation instead of uploading the file or pretending the viewer works offline.
 
-The following formats are detected but are not rendered locally:
+## UX behavior
 
-- `.doc`
-- `.xls`
-- `.ppt`
+- V10 dark visual system and typography are the default.
+- Dark Mode has a working toggle; Light Mode uses a neutral derived palette rather than the original yellow/orange brief.
+- Reading Mode reflows document text for longer reading sessions.
+- Text/document zoom changes the actual font/layout size instead of using `transform: scale()`, preventing the dead-space and clipping problem from earlier versions.
+- Fullscreen hides the viewer chrome when browser fullscreen is available; the Esc key exits native fullscreen and closes the viewer when appropriate.
+- File metadata persists in localStorage; browser security means the actual File object must be re-selected after a full reload.
+- Clear list asks for confirmation.
 
-These older Office formats require a different rendering/conversion strategy. FileBroCode does not upload them to an external document viewer.
+## Recent fixes
+- Supported files selected from the picker now open immediately in the viewer.
+- The footer matches the current dark FileBroCode visual system and removes social/connect sections.
+- PDF iframe controls are enabled in normal and fullscreen viewing so the browser PDF toolbar can expose page count, navigation, zoom and sidebar controls.
+- File remove hover is a red close treatment with no external/AI branding.
+- Light-mode theme toggle has an explicit light-surface style.
+## Desktop app download
 
-## PDF Viewer
+The navbar, hero and footer desktop CTA buttons are wired to `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL`. Without that environment variable they use `/downloads/FileBro-Setup-1.0.0-x64.exe`.
 
-PDF files are opened using a local object URL inside the browser PDF viewer.
-
-The PDF viewer can expose browser-native controls such as:
-
-- Page navigation
-- Page number / total pages
-- Zoom
-- Sidebar / thumbnails
-- Toolbar controls
-- Fullscreen viewing
-
-The exact native PDF controls depend on the browser and operating system.
-
-## Local-First Architecture
-
-The core flow is:
-
-```text
-User
-  ↓
-FileBroCode
-  ↓
-Device File Picker
-  ↓
-Browser / WebView
-  ↓
-Local File Processing
-  ↓
-Viewer
+For local testing, place the Windows installer at `public/downloads/FileBro-Setup-1.0.0-x64.exe`. For production, set `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` to the URL where you host the installer.
